@@ -1,0 +1,178 @@
+```{r packages and functions, include = FALSE}
+library(gganimate)
+library(ggplot2)
+library(tidyverse)
+# install.packages('gifski')
+
+# cluster.means function by Dr. Alyssa Counsell
+cluster.means <- function(var,grp) { 
+    return(tapply(var,grp,mean,na.rm=T)[grp])
+}
+```
+
+```{r stimuluate data, include = FALSE}
+# DV = grades on SPSS lab assignments
+# PV level 1 = stud's score on ATSPSS (single* sum score ranging 0 - 50), higher scores = more +ve attitudes
+# PV level 2 = school size 
+# 3 schools
+set.seed(8714)
+# Simulate ATSPSS Scores
+ATSPSS_A <- rnorm(n = 10, mean = 40, sd = 3) 
+ATSPSS_B <- rnorm(n = 16, mean = 20, sd = 3) 
+ATSPSS_C <- rnorm(n = 24, mean = 10, sd = 3) 
+ATSPSS <- c(ATSPSS_A, ATSPSS_B, ATSPSS_C)
+
+# Simulate Lab Assignment Grades
+grades_A <- rnorm(n = 10, mean = 85, sd = 3) 
+grades_B <- rnorm(n = 16, mean = 65, sd = 3) 
+grades_C <- rnorm(n = 24, mean = 50, sd = 3) 
+grades <- c(grades_A, grades_B, grades_C)
+
+# Stimulate School ID
+school_ID <- rep(c("A","B","C"), times = c(10, 16, 24))
+# Stimulate School Size
+school_size <- rep(c("0","1","2"), times = c(10, 16, 24)) # small, medium, big
+# Stimulate Student ID
+stud_ID <- rep(1:50)
+
+df <- data.frame(ATSPSS, grades, school_ID, stud_ID, school_size)
+```
+
+<center><h1>Grand Mean Centering vs. Within-Cluster Centering Predictor Variables in Multilevel Models</h1> </center>
+<br>
+<h2>**Overview:**</h2>
+
+<h3>|       It is often recommended to center your predictor variables in a multilevel model. Researchers must decide whether-to and how-to center their variables such as picking between grand-mean centering and within-cluster centering.
+<br>
+In this document, we will use a simulated Psychology data set and a dynamic plot to aid researchers' understanding and decision-making on centering in multilevel models. The reader should have an introductory level understanding of what multilevel models are along with when and why these models are used.</h3>
+-----------
+<h2>**Nested Data:**</h2>
+<h4>It is not uncommon for data in Psychology to be nested. A nested data structure means that observations are not independent (i.e., observations are clustered into groups either intentionally or unintentionally). In the simulated data set below: 
+
+1. We were interested in whether undergraduate Psychology students' attitudes toward SPSS software affects their grades. 
+2. We were also interested in whether the size of the school affects students' grades so we collected data from a total of 50 students from 3 different schools. 
+
+It is evident from the scatter plot below that our data is nested since students within a school are more similar to each other than students from a different school.</h4>
+<br>
+
+```{r static plot to show clustering, echo = FALSE}
+colourBlindPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7") # from Cookbook for R: http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
+
+p <- ggplot(data = df, mapping = aes(x = ATSPSS, y = grades, color = school_ID)) + 
+    geom_point(size = 3) + 
+    ggtitle(NULL) +
+    xlab("Attitudes toward SPSS") +
+    ylab("Grades on SPSS Assignments (%)") +
+    scale_color_manual(values = colourBlindPalette, name = "School") +
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5, margin=margin(b=10)),
+          axis.title.x = element_text(margin=margin(t=10)),
+          axis.title.y = element_text(margin=margin(r=10))
+          )
+plot(p)
+```
+
+<br>
+<h4>About the simulated data set:
+
+* **ATSPSS:** sum score on Attitudes toward SPSS (ATSPSS) survey. Higher scores indicate more favourable attitudes toward SPSS. 
+* **grades:** a student's average grade on all SPSS lab assignments in the course.
+* **school_ID:** denotes the school the student belongs to.
+* **stud_ID:** unique ID belonging to each student.
+* **school_size:** categorical variable that denotes the size of the school, (0 = small, 1 = medium, 2 = big).</h4>
+
+```{r about the data}
+colnames(df)
+str(df)
+head(df)
+unique(df$school_ID)
+```
+<br>
+
+<h2>**Centering in Multilevel Modeling:**</h2>
+
+<h4>|       Since our clusters (i.e., 'schools') are not exhaustive and we are interested in testing the effect of an individual-level variable (i.e., 'attitudes') and a group-level variable (i.e., 'school_size') on our dependent variable (i.e., 'grades'), we would run a multilevel model.
+
+<br>
+However, the parameter estimates from a multilevel model would still be an ambiguous blend between individual-level and cluster-level effects. It is highly recommended to center your predictor variables to disentangle the different level effects (Enders & Tofighi, 2007). 
+
+<br> 
+There are two ways we can center our predictor variables: 1) grand-mean centering (GMC) and 2) within-cluster centering (WCC). For level-2 predictors (i.e., 'school_size'), we can only GMC. For level-1 predictors (i.e., 'attitudes'), we can choose between GMC or WCC. GMC only improves the interpretability of our model (similar to its role in regular regression) whereas WCC disentangles our level-1 and level-2 effects. 
+
+<br>
+The dynamic plot below illustrates the difference between GMC and WCC. Specifically, it illustrates how WCC disentangles our individual- and cluster-level effects, but GMC does not.
+<br> 
+<br>
+
+```{r, centering calculations, include = FALSE}
+df$gmcATSPSS <- mean(df$ATSPSS)
+df$wccATSPSS <- cluster.means(df$ATSPSS, df$school_ID)
+df$withinClusterCentered <- df$ATSPSS-df$wccATSPSS
+df$grandMeanCentered <- df$ATSPSS-df$gmcATSPSS
+```
+
+```{r, include = FALSE}
+# Long Format the df for gganimate
+df_long <- df %>% pivot_longer(
+    cols = c("ATSPSS", "grandMeanCentered", "withinClusterCentered"),
+    names_to = "centeringMethod",
+    values_to = "ATSPSS")
+```
+
+```{r, create animated plot, include = FALSE}
+df_animated <- ggplot(df_long, aes(x = ATSPSS, y = grades, colour = school_ID)) +
+    geom_point() + 
+    transition_states(
+        centeringMethod,
+        transition_length = 2,
+        state_length = 4
+    ) + 
+    view_follow() + 
+    enter_fade() +
+    exit_shrink() +
+    labs(title = "ATSPSS scores are {previous_state}") +
+    xlab("Attitudes toward SPSS") +
+    ylab("Grades on SPSS Assignments (%)") +
+    scale_color_manual(values = colourBlindPalette, name = "School") +
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5, margin=margin(b=10)),
+          axis.title.x = element_text(margin=margin(t=10)),
+          axis.title.y = element_text(margin=margin(r=10))
+          )
+```
+
+```{r star of the show, echo = FALSE}
+df_animated
+
+# to save df_animated to a gif:
+animate(df_animated) # requires gifski to be installed
+anim_save("centering_example.gif") # saves the last created animation, i.e., the animation object returned by animate()
+```
+
+<br>
+
+**Plot 1: "ATSPSS scores are ATSPSS"**
+
+|       The plot begins as a simple scatter plot of Grades plotted against uncentered ATSPSS scores. The colouring of the data points is used to differentiate the 3 schools (i.e., groups). Even without the colouring, the data points are evidently clustered by school.
+<br>
+<br>
+**Plot 2: "ATSPSS scores are grandMeanCentered"**
+
+|       In this plot, the x-axis is now the GMC ATSPSS scores. To get the GMC scores, the average ATSPSS score across all students and schools was calculated (i.e., the grand-mean). The grand-mean (equal to 19.16 in this example) was then subtracted from each data point. In other words, we moved all the data points to the left by 19.16 units, thus preserving the data points' relative position to each other.
+<br>
+Since we preserved the relative position of the data points, the between-group effect from Plot 1 remains. We still see the between-group effect since Plot 2 looks the same as Plot 1, aside from a shifted x-axis.
+<br>
+<br>
+<br>
+**Plot 3: "ATSPSS scores are withinClusterCentered**
+
+|       In the final plot, the x-axis is the WCC ATSPSS scores. To obtain this plot, we first calculated the average ATSPSS score for *each* school (schoolA = 40.26, schoolB = 20.02, schoolC = 9.80). Then, we took each student's individual ATSPSS score and subtracted *their* school's average ATSPSS score. For example, student #1 has an uncentered ATSPSS score of 40.60 and their school (school A) has an average ATSPSS score of 40.26 so their WCC ATSPSS score is 0.34. A WCC ATSPSS score of 0.34 means that student #1 is 0.34 units above *their school's average* ATSPSS score. 
+<br>
+In other words, the WCC ATSPSS scores now represent the position of an individual's ATSPSS score *relative to other members of their group*. Therefore, the slope estimate (for the relationship between WCC ATSPSS and grades) in your multilevel model will now purely represent the within-cluster effect on student grades. As illustrated in the plot, the between-group effect is no longer present.</h4>
+<br>
+
+    Note that to obtain the pure between-cluster effect, please look into "Adding back the mean". 
+
+    Made by Carmen Dang
+
+    References: Enders, C. K., & Tofighi, D. (2007). Centering predictor variables in cross-sectional multilevel models: a new look at an old issue. Psychological methods, 12(2), 121.
